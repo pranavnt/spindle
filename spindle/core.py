@@ -1,9 +1,5 @@
 from typing import Callable, Any, Dict, List, Optional, TypeVar, Tuple
 from functools import wraps
-import os
-from typing import Optional, Any, Dict
-from openai import OpenAI
-from anthropic import Anthropic
 
 State = Dict[str, Any]
 T = TypeVar('T')
@@ -11,6 +7,8 @@ NextModule = Callable[[State], Tuple[State, Optional['NextModule']]]
 ModuleFunc = Callable[[State], Tuple[State, NextModule]]
 Program = Callable[[State], State]
 EvaluationFunction = Callable[[Program, List[State]], float]
+
+ExecutionHistory = List[Tuple[State, str]]
 
 def terminate(state: State) -> Tuple[State, None]:
     """Terminal module that signals the end of a program."""
@@ -41,16 +39,19 @@ def module(input_keys: Optional[List[str]] = None, output_keys: Optional[List[st
         return wrapper
     return decorator
 
-def create_program(initial_module: ModuleFunc) -> Program:
-    """Creates a runnable program from an initial module."""
-    def run(initial_state: State) -> State:
+def create_program(initial_module: ModuleFunc) -> Callable[[State], Tuple[State, ExecutionHistory]]:
+    """Creates a runnable program from an initial module that returns execution history."""
+    def run(initial_state: State) -> Tuple[State, ExecutionHistory]:
         state = initial_state.copy()
         current_module = initial_module
+        history = []
 
         while current_module is not None:
+            module_name = current_module.__name__
             state, current_module = current_module(state)
+            history.append((state.copy(), module_name))
 
-        return state
+        return state, history
 
     return run
 
