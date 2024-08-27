@@ -1,8 +1,7 @@
-from typing import Callable, Any, Dict, List, Optional, TypeVar, Tuple
+from typing import Callable, Any, Dict, List, Optional, Tuple
 from functools import wraps, reduce
 
 State = Dict[str, Any]
-T = TypeVar('T')
 NextModule = Callable[[State], Tuple[State, Optional['NextModule']]]
 ModuleFunc = Callable[[State], Tuple[State, NextModule]]
 Program = Callable[[State], State]
@@ -97,16 +96,3 @@ def optimize(program: Program,
             best_score = mutated_score
 
     return best_program
-
-# New utility functions for a more FP approach
-def map_state(f: Callable[[Any], Any]) -> Callable[[State], State]:
-    """Returns a function that applies f to all values in the state."""
-    return lambda state: {k: f(v) for k, v in state.items()}
-
-def filter_state(pred: Callable[[str, Any], bool]) -> Callable[[State], State]:
-    """Returns a function that filters the state based on the predicate."""
-    return lambda state: {k: v for k, v in state.items() if pred(k, v)}
-
-def reduce_state(f: Callable[[Any, Any], Any], initial: Any) -> Callable[[State], Any]:
-    """Returns a function that reduces the state using the given function and initial value."""
-    return lambda state: reduce(f, state.values(), initial)
