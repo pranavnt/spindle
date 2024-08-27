@@ -1,5 +1,5 @@
 from typing import Callable, Any, Dict, List, Optional, TypeVar, Tuple
-from functools import wraps
+from functools import wraps, reduce
 
 State = Dict[str, Any]
 T = TypeVar('T')
@@ -39,29 +39,28 @@ def module(input_keys: Optional[List[str]] = None, output_keys: Optional[List[st
         return wrapper
     return decorator
 
-def create_program(initial_module: ModuleFunc) -> Callable[[State], Tuple[State, ExecutionHistory]]:
+def compose(*modules: ModuleFunc) -> ModuleFunc:
+    """Composes multiple modules into a single module using functional composition."""
+    return lambda state: reduce(lambda acc, m: m(*acc), modules, (state, None))[0]
+
+def create_program(initial_module: ModuleFunc, max_depth: int = 100) -> Callable[[State], Tuple[State, ExecutionHistory]]:
     """Creates a runnable program from an initial module that returns execution history."""
     def run(initial_state: State) -> Tuple[State, ExecutionHistory]:
-        state = initial_state.copy()
-        current_module = initial_module
-        history = []
+        def step(acc: Tuple[State, ExecutionHistory, Optional[ModuleFunc], int]) -> Tuple[State, ExecutionHistory, Optional[ModuleFunc], int]:
+            state, history, current_module, depth = acc
+            if current_module is None or depth >= max_depth:
+                return state, history, None, depth
+            new_state, next_module = current_module(state)
+            return new_state, history + [(new_state.copy(), current_module.__name__)], next_module, depth + 1
 
-        while current_module is not None:
-            module_name = current_module.__name__
-            state, current_module = current_module(state)
-            history.append((state.copy(), module_name))
-
-        return state, history
+        final_state, history, _, _ = reduce(
+            lambda acc, _: step(acc),
+            range(max_depth),
+            (initial_state, [], initial_module, 0)
+        )
+        return final_state, history
 
     return run
-
-def compose(*modules: ModuleFunc) -> ModuleFunc:
-    """Composes multiple modules into a single module."""
-    def composed_module(state: State) -> Tuple[State, NextModule]:
-        for module in modules[:-1]:
-            state, _ = module(state)
-        return modules[-1](state)
-    return composed_module
 
 def branch(condition: Callable[[State], bool], if_true: ModuleFunc, if_false: ModuleFunc) -> ModuleFunc:
     """Creates a conditional branching module."""
@@ -98,3 +97,16 @@ def optimize(program: Program,
             best_score = mutated_score
 
     return best_program
+
+# New utility functions for a more FP approach
+def map_state(f: Callable[[Any], Any]) -> Callable[[State], State]:
+    """Returns a function that applies f to all values in the state."""
+    return lambda state: {k: f(v) for k, v in state.items()}
+
+def filter_state(pred: Callable[[str, Any], bool]) -> Callable[[State], State]:
+    """Returns a function that filters the state based on the predicate."""
+    return lambda state: {k: v for k, v in state.items() if pred(k, v)}
+
+def reduce_state(f: Callable[[Any, Any], Any], initial: Any) -> Callable[[State], Any]:
+    """Returns a function that reduces the state using the given function and initial value."""
+    return lambda state: reduce(f, state.values(), initial)
