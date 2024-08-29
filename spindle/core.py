@@ -96,3 +96,14 @@ def optimize(program: Program,
             best_score = mutated_score
 
     return best_program
+
+def simple_module(func: Callable[[State], State]) -> ModuleFunc:
+    """
+    Converts a simple function that only modifies state into a proper module function.
+    This allows for easy creation of modules like 'summarize' without explicitly handling the next module.
+    """
+    @wraps(func)
+    def wrapper(state: State) -> Tuple[State, NextModule]:
+        new_state = func(state)
+        return new_state, None
+    return wrapper
