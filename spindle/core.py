@@ -1,5 +1,3 @@
-# core.py
-
 from typing import Callable, Any, Dict, List, Optional, Tuple, Union
 from functools import wraps, reduce
 
@@ -87,5 +85,5 @@ def branch(condition: Callable[[State], bool], if_true: ModuleFunc, if_false: Mo
         if isinstance(result, tuple):
             return result
         else:
-            return (result, None)
+            return result, None
     return branching_module
