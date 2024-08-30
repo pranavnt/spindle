@@ -1,4 +1,7 @@
+import ast
+import inspect
 from typing import Callable, Any, Dict, List, Optional, Tuple, Union
+import textwrap
 from functools import wraps, reduce
 
 State = Dict[str, Any]
@@ -6,15 +9,46 @@ SimpleModuleFunc = Callable[[State], State]
 ComplexModuleFunc = Callable[[State], Tuple[State, Optional[str]]]
 ModuleFunc = Union[SimpleModuleFunc, ComplexModuleFunc]
 Program = Callable[[State], State]
+EvalFunc = Callable[[Program, List[State]], List[float]]
+Optimizer = Callable[[Program, EvalFunc], Program]
 
-def module(input_keys: Optional[List[str]] = None, output_keys: Optional[List[str]] = None, has_transition: bool = True):
+def analyze_function(func):
+    source = inspect.getsource(func)
+    # Remove any common leading whitespace from every line in the source
+    source = textwrap.dedent(source)
+    tree = ast.parse(source)
+
+    input_keys = set()
+    output_keys = set()
+
+    class KeyVisitor(ast.NodeVisitor):
+        def visit_Subscript(self, node):
+            if isinstance(node.value, ast.Name) and node.value.id == 'state':
+                if isinstance(node.slice, ast.Str):  # For Python 3.8 and earlier
+                    key = node.slice.s
+                elif isinstance(node.slice, ast.Constant):  # For Python 3.9+
+                    key = node.slice.value
+                else:
+                    return  # Skip if it's not a string key
+
+                if isinstance(node.ctx, ast.Load):
+                    input_keys.add(key)
+                elif isinstance(node.ctx, ast.Store):
+                    output_keys.add(key)
+            self.generic_visit(node)
+
+    KeyVisitor().visit(tree)
+    return list(input_keys), list(output_keys)
+
+def module(has_transition: bool = True):
     def decorator(func: Union[SimpleModuleFunc, ComplexModuleFunc]) -> ModuleFunc:
+        input_keys, output_keys = analyze_function(func)
+
         @wraps(func)
         def wrapper(state: State) -> Union[State, Tuple[State, Optional[str]]]:
-            if input_keys:
-                missing_keys = set(input_keys) - set(state.keys())
-                if missing_keys:
-                    raise KeyError(f"Missing required input keys: {missing_keys}")
+            missing_keys = set(input_keys) - set(state.keys())
+            if missing_keys:
+                raise KeyError(f"Missing required input keys: {missing_keys}")
 
             result = func(state)
 
@@ -23,15 +57,16 @@ def module(input_keys: Optional[List[str]] = None, output_keys: Optional[List[st
             else:
                 new_state, next_module = result, None
 
-            if output_keys:
-                missing_keys = set(output_keys) - set(new_state.keys())
-                if missing_keys:
-                    raise KeyError(f"Missing required output keys: {missing_keys}")
+            missing_keys = set(output_keys) - set(new_state.keys())
+            if missing_keys:
+                raise KeyError(f"Missing required output keys: {missing_keys}")
 
             return (new_state, next_module) if has_transition else new_state
 
         wrapper.is_module = True
         wrapper.has_transition = has_transition
+        wrapper.input_keys = input_keys
+        wrapper.output_keys = output_keys
         return wrapper
     return decorator
 
@@ -39,7 +74,7 @@ def compose(*modules: ModuleFunc) -> ModuleFunc:
     @module()
     def composed_module(state: State) -> Tuple[State, Optional[str]]:
         def reducer(acc: Tuple[State, Optional[str]], mod: ModuleFunc) -> Tuple[State, Optional[str]]:
-            if acc[1] is not None:  # If a transition has been specified, stop processing
+            if acc[1] is not None:
                 return acc
             if mod.has_transition:
                 return mod(acc[0])
