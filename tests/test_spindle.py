@@ -1,5 +1,5 @@
 import pytest
-from spindle.core import module, compose, branch, State
+from spindle.core import module, compose, branch, State, ModuleFunc
 
 def test_module_decorator():
     @module(input_keys=['input'], output_keys=['output'], flow=False)
@@ -109,11 +109,12 @@ def test_complex_program():
         return state
 
     @module(input_keys=['processed'], output_keys=[], flow=True)
-    def branching_module(state: State) -> tuple[State, str]:
+    def branching_module(state: State) -> tuple[State, ModuleFunc]:
+        print(state)
         if state['processed'] > 10:
-            return state, 'large_module'
+            return state, large_module
         else:
-            return state, 'small_module'
+            return state, small_module
 
     @module(input_keys=['processed'], output_keys=['result'], flow=False)
     def large_module(state: State) -> State:
@@ -128,6 +129,7 @@ def test_complex_program():
     program = compose(input_module, branching_module, large_module, small_module)
 
     large_result = program({'input': 6})
+
     assert large_result == {'input': 6, 'processed': 12, 'result': 'large'}
 
     small_result = program({'input': 4})
