@@ -8,24 +8,29 @@ def test_module_decorator():
         return state
 
     result = test_module({'input': 5})
+    print(result)
+    print(test_module.is_module)
+    print(test_module.has_transition)
+    print(test_module.input_keys)
+    print(test_module.output_keys)
     assert result == {'input': 5, 'output': 10}
-    assert hasattr(test_module, 'is_module')
-    assert hasattr(test_module, 'has_transition')
-    assert hasattr(test_module, 'input_keys')
-    assert hasattr(test_module, 'output_keys')
-    assert test_module.input_keys == ['input']
-    assert test_module.output_keys == ['output']
-    assert test_module.has_transition == False
+    assert getattr(test_module, 'is_module', False)
+    if hasattr(test_module, 'has_transition'):
+        assert test_module.has_transition == False
+    else:
+        assert False
+    assert getattr(test_module, 'input_keys', []) == ['input']
+    assert getattr(test_module, 'output_keys', []) == ['output']
 
 def test_module_with_transition():
     @module(input_keys=['input'], output_keys=['output'], flow=True)
-    def test_module(state: State) -> tuple[State, str]:
+    def test_module(state: State) -> tuple[State, ModuleFunc]:
         state['output'] = state['input'] * 2
-        return state, 'next_module'
+        return state, lambda s: s
 
     result, next_module = test_module({'input': 5})
     assert result == {'input': 5, 'output': 10}
-    assert next_module == 'next_module'
+    assert callable(next_module)
 
 def test_module_missing_input():
     @module(input_keys=['input'], output_keys=['output'], flow=False)
@@ -66,9 +71,9 @@ def test_compose_with_flow():
         return state
 
     @module(input_keys=['intermediate'], output_keys=['output'], flow=True)
-    def module2(state: State) -> tuple[State, str]:
+    def module2(state: State) -> tuple[State, ModuleFunc]:
         state['output'] = state['intermediate'] + 1
-        return state, 'module3'
+        return state, module3
 
     @module(input_keys=['output'], output_keys=['final'], flow=False)
     def module3(state: State) -> State:
@@ -110,7 +115,6 @@ def test_complex_program():
 
     @module(input_keys=['processed'], output_keys=[], flow=True)
     def branching_module(state: State) -> tuple[State, ModuleFunc]:
-        print(state)
         if state['processed'] > 10:
             return state, large_module
         else:
@@ -129,7 +133,6 @@ def test_complex_program():
     program = compose(input_module, branching_module, large_module, small_module)
 
     large_result = program({'input': 6})
-
     assert large_result == {'input': 6, 'processed': 12, 'result': 'large'}
 
     small_result = program({'input': 4})
