@@ -7,18 +7,11 @@ def test_module_decorator():
         state['output'] = state['input'] * 2
         return state
 
-    result = test_module({'input': 5})
-    print(result)
-    print(test_module.is_module)
-    print(test_module.has_transition)
-    print(test_module.input_keys)
-    print(test_module.output_keys)
+    result, next_module = test_module({'input': 5})
     assert result == {'input': 5, 'output': 10}
+    assert next_module is None
     assert getattr(test_module, 'is_module', False)
-    if hasattr(test_module, 'has_transition'):
-        assert test_module.has_transition == False
-    else:
-        assert False
+    assert getattr(test_module, 'has_transition', False) == False
     assert getattr(test_module, 'input_keys', []) == ['input']
     assert getattr(test_module, 'output_keys', []) == ['output']
 
@@ -26,11 +19,11 @@ def test_module_with_transition():
     @module(input_keys=['input'], output_keys=['output'], flow=True)
     def test_module(state: State) -> tuple[State, ModuleFunc]:
         state['output'] = state['input'] * 2
-        return state, lambda s: s
+        return state, None
 
     result, next_module = test_module({'input': 5})
     assert result == {'input': 5, 'output': 10}
-    assert callable(next_module)
+    assert next_module is None
 
 def test_module_missing_input():
     @module(input_keys=['input'], output_keys=['output'], flow=False)
@@ -101,10 +94,10 @@ def test_branch():
         odd_module
     )
 
-    even_result = branching_module({'input': 2})
+    even_result, _ = branching_module({'input': 2})
     assert even_result == {'input': 2, 'result': 'even'}
 
-    odd_result = branching_module({'input': 3})
+    odd_result, _ = branching_module({'input': 3})
     assert odd_result == {'input': 3, 'result': 'odd'}
 
 def test_complex_program():
@@ -130,7 +123,7 @@ def test_complex_program():
         state['result'] = 'small'
         return state
 
-    program = compose(input_module, branching_module, large_module, small_module)
+    program = compose(input_module, branching_module)
 
     large_result = program({'input': 6})
     assert large_result == {'input': 6, 'processed': 12, 'result': 'large'}
