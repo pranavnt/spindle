@@ -2,6 +2,7 @@ from typing import Callable, Any, Dict, List, Optional, Tuple, Union
 from functools import wraps
 
 State = Dict[str, Any]
+
 SimpleModuleFunc = Callable[[State], State]
 ComplexModuleFunc = Callable[[State], Tuple[State, Optional['ModuleFunc']]]
 ModuleFunc = Callable[[State], Tuple[State, Optional['ModuleFunc']]]
