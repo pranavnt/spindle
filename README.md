@@ -8,10 +8,12 @@ spindle takes some inspiration from dspy and moatless tools. it's also probably 
 
 To install, run `pip install git+https://github.com/pranavnt/spindle`
 
-## utilities
-
-- text splitting utilities; probably worth having sadly
-- GPT model wrapper; add support for generations, embeddings, json/structured generator, etc., ollama etc.
-
 ## TODO
-- what if you want to have a "fork" module. i.e. if you want to have multiple return values or smth
+
+- core — should be good for now, once optimization is more ironed out
+- data
+- models
+— GPT
+— BERT/Embeddings
+- retrieve
+— vectordb
