@@ -1,54 +1,50 @@
 import pytest
-from spindle.core import create_module, compose, branch, optimize, State, Config, ModuleState
+from spindle.core import module, compose, branch, State, Config, ModuleState, ModuleFunc, OptimizerFunc
+
+@module(input_keys=["input"], output_keys=["output"])
+def simple_module_func(state: State, config: Config, module_state: ModuleState) -> tuple[State, ModuleState]:
+    return {"output": state["input"] + "processed"}, module_state
 
 def test_simple_module():
-    def test_func(state: State, config: Config, module_state: ModuleState) -> tuple[State, ModuleState]:
-        return {"output": state["input"] + "processed"}, module_state
-
-    test_module = create_module(test_func, input_keys=["input"], output_keys=["output"])
-
-    result, _ = test_module({"input": "test"}, {})
+    result, _ = simple_module_func({"input": "test"}, {})
     assert result == {"output": "testprocessed"}
 
+@module(input_keys=["input"], output_keys=["output"])
+def stateful_func(state: State, config: Config, module_state: ModuleState) -> tuple[State, ModuleState]:
+    count = module_state.get("count", 0) + 1
+    return {"output": f"{state['input']}{count}"}, {"count": count}
+
 def test_stateful_module():
-    def stateful_func(state: State, config: Config, module_state: ModuleState) -> tuple[State, ModuleState]:
-        count = module_state.get("count", 0) + 1
-        return {"output": f"{state['input']}{count}"}, {"count": count}
-
-    stateful_module = create_module(stateful_func, input_keys=["input"], output_keys=["output"])
-
-    result1, _ = stateful_module({"input": "test"}, {})
+    result1, _ = stateful_func({"input": "test"}, {})
     assert result1 == {"output": "test1"}
 
-    result2, _ = stateful_module({"input": "test"}, {})
+    result2, _ = stateful_func({"input": "test"}, {})
     assert result2 == {"output": "test2"}
 
+@module(input_keys=["input"], output_keys=["output"])
+def config_func(state: State, config: Config, module_state: ModuleState) -> tuple[State, ModuleState]:
+    prefix = config.get("prefix", "")
+    return {"output": f"{prefix}{state['input']}"}, module_state
+
 def test_configurable_module():
-    def config_func(state: State, config: Config, module_state: ModuleState) -> tuple[State, ModuleState]:
-        prefix = config.get("prefix", "")
-        return {"output": f"{prefix}{state['input']}"}, module_state
-
-    config_module = create_module(config_func, input_keys=["input"], output_keys=["output"])
-
-    result1, _ = config_module({"input": "test"}, {"prefix": "Pre-"})
+    result1, _ = config_func({"input": "test"}, {"prefix": "Pre-"})
     assert result1 == {"output": "Pre-test"}
 
-    result2, _ = config_module({"input": "test"}, {})
+    result2, _ = config_func({"input": "test"}, {})
     assert result2 == {"output": "test"}
 
 def test_branch_module():
+    @module(input_keys=["input"], output_keys=["output"])
     def true_func(state: State, config: Config, module_state: ModuleState) -> tuple[State, ModuleState]:
         return {"output": "true"}, module_state
 
+    @module(input_keys=["input"], output_keys=["output"])
     def false_func(state: State, config: Config, module_state: ModuleState) -> tuple[State, ModuleState]:
         return {"output": "false"}, module_state
 
-    true_module = create_module(true_func, input_keys=["input"], output_keys=["output"])
-    false_module = create_module(false_func, input_keys=["input"], output_keys=["output"])
-
     condition = lambda state, config: state["input"] > 0
 
-    branched = branch(condition, true_module, false_module)
+    branched = branch(condition, true_func, false_func)
 
     result1, _ = branched({"input": 1}, {})
     assert result1 == {"output": "true"}
@@ -56,45 +52,45 @@ def test_branch_module():
     result2, _ = branched({"input": -1}, {})
     assert result2 == {"output": "false"}
 
-def test_optimize_module():
-    def test_func(state: State, config: Config, module_state: ModuleState) -> tuple[State, ModuleState]:
-        multiplier = module_state.get("multiplier", 1)
+def test_optimizer_usage():
+    @module(input_keys=["input"], output_keys=["output"])
+    def optimizable_func(state: State, config: Config, module_state: ModuleState) -> tuple[State, ModuleState]:
+        multiplier = config.get("multiplier", 1)
         return {"output": state["input"] * multiplier}, module_state
 
-    test_module = create_module(test_func, input_keys=["input"], output_keys=["output"])
+    # User-defined optimizer function
+    def my_optimizer(module_func: ModuleFunc, config: Config) -> Config:
+        # Here we could use properties of module_func if needed
+        return {**config, "multiplier": 2}
 
-    def optimizer_func(module_state: ModuleState) -> ModuleState:
-        return {**module_state, "multiplier": 2}
+    original_config = {}
+    optimized_config = my_optimizer(optimizable_func, original_config)
 
-    optimized_module = optimize(test_module, optimizer_func)
-
-    result1, _ = test_module({"input": 5}, {})
+    result1, _ = optimizable_func({"input": 5}, original_config)
     assert result1 == {"output": 5}
 
-    result2, _ = optimized_module({"input": 5}, {})
+    result2, _ = optimizable_func({"input": 5}, optimized_config)
     assert result2 == {"output": 10}
 
 def test_error_handling():
+    @module(input_keys=["input"], output_keys=["output"])
     def error_func(state: State, config: Config, module_state: ModuleState) -> tuple[State, ModuleState]:
         return {"wrong_key": state["input"]}, module_state
 
-    error_module = create_module(error_func, input_keys=["input"], output_keys=["output"])
-
     with pytest.raises(KeyError, match="Missing required input keys"):
-        error_module({}, {})
+        error_func({}, {})
 
     with pytest.raises(KeyError, match="Missing required output keys"):
-        error_module({"input": "test"}, {})
+        error_func({"input": "test"}, {})
 
 def test_compose_modules():
+    @module(input_keys=["input"], output_keys=["intermediate"])
     def module_a(state: State, config: Config, module_state: ModuleState) -> tuple[State, ModuleState]:
         return {"intermediate": state["input"] * 2}, module_state
 
+    @module(input_keys=["intermediate"], output_keys=["output"])
     def module_b(state: State, config: Config, module_state: ModuleState) -> tuple[State, ModuleState]:
         return {"output": state["intermediate"] + 1}, module_state
-
-    module_a = create_module(module_a, input_keys=["input"], output_keys=["intermediate"])
-    module_b = create_module(module_b, input_keys=["intermediate"], output_keys=["output"])
 
     composed = compose(module_a, module_b)
 
@@ -102,16 +98,15 @@ def test_compose_modules():
     assert result == {"output": 11}
 
 def test_complex_composition():
+    @module(input_keys=["input"], output_keys=["intermediate"])
     def multiply(state: State, config: Config, module_state: ModuleState) -> tuple[State, ModuleState]:
         return {"intermediate": state["input"] * config.get("multiplier", 2)}, module_state
 
+    @module(input_keys=["intermediate"], output_keys=["output"])
     def add(state: State, config: Config, module_state: ModuleState) -> tuple[State, ModuleState]:
         return {"output": state["intermediate"] + config.get("addend", 1)}, module_state
 
-    multiply_module = create_module(multiply, input_keys=["input"], output_keys=["intermediate"])
-    add_module = create_module(add, input_keys=["intermediate"], output_keys=["output"])
-
-    composed = compose(multiply_module, add_module)
+    composed = compose(multiply, add)
 
     result, _ = composed({"input": 5}, {"multiplier": 3, "addend": 2})
     assert result == {"output": 17}
