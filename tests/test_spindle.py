@@ -1,5 +1,5 @@
 import pytest
-from spindle.core import module, compose, branch, State, Config, ModuleState, ModuleFunc, OptimizerFunc
+from spindle.core import module, compose, branch, fork, State, Config, ModuleState, ModuleFunc, OptimizerFunc
 
 @module(input_keys=["input"], output_keys=["output"])
 def simple_module_func(state: State, config: Config, module_state: ModuleState) -> tuple[State, ModuleState]:
@@ -58,9 +58,7 @@ def test_optimizer_usage():
         multiplier = config.get("multiplier", 1)
         return {"output": state["input"] * multiplier}, module_state
 
-    # User-defined optimizer function
     def my_optimizer(module_func: ModuleFunc, config: Config) -> Config:
-        # Here we could use properties of module_func if needed
         return {**config, "multiplier": 2}
 
     original_config = {}
@@ -110,6 +108,39 @@ def test_complex_composition():
 
     result, _ = composed({"input": 5}, {"multiplier": 3, "addend": 2})
     assert result == {"output": 17}
+
+def test_fork_module():
+    @module(input_keys=["input"], output_keys=["output1"])
+    def module_a(state: State, config: Config, module_state: ModuleState) -> tuple[State, ModuleState]:
+        return {"output1": state["input"] * 2}, module_state
+
+    @module(input_keys=["input"], output_keys=["output2"])
+    def module_b(state: State, config: Config, module_state: ModuleState) -> tuple[State, ModuleState]:
+        return {"output2": state["input"] + 1}, module_state
+
+    forked_module = fork(module_a, module_b)
+
+    result, _ = forked_module({"input": 5}, {})
+    assert result == [{'output1': 10}, {'output2': 6}]
+
+def test_fork_and_compose():
+    @module(input_keys=["input"], output_keys=["output1"])
+    def module_a(state: State, config: Config, module_state: ModuleState) -> tuple[State, ModuleState]:
+        return {"output1": state["input"] * 2}, module_state
+
+    @module(input_keys=["input"], output_keys=["output2"])
+    def module_b(state: State, config: Config, module_state: ModuleState) -> tuple[State, ModuleState]:
+        return {"output2": state["input"] + 1}, module_state
+
+    @module(input_keys=["output1", "output2"], output_keys=["final_output"])
+    def combine_module(state: State, config: Config, module_state: ModuleState) -> tuple[State, ModuleState]:
+        return {"final_output": state["output1"] + state["output2"]}, module_state
+
+    forked_module = fork(module_a, module_b)
+    pipeline = compose(forked_module, combine_module)
+
+    result, _ = pipeline({"input": 5}, {})
+    assert result == {'final_output': 16}
 
 if __name__ == "__main__":
     pytest.main()
