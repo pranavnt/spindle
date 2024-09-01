@@ -10,10 +10,9 @@ To install, run `pip install git+https://github.com/pranavnt/spindle`
 
 ## TODO
 
-- core — should be good for now, once optimization is more ironed out
-- data
+- data — go through helpful data splitters and add these
 - models
-— GPT
-— BERT/Embeddings
+— GPT -- add structured output support
+— BERT/Embeddings — todo
 - retrieve
 — vectordb
