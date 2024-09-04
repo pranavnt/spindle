@@ -67,4 +67,4 @@ class Graph:
 
     def add_edge(self, src: Node, tgt: Node, metadata: Dict[str, Any] = {}) -> None:
         self.edges[src.id].append(Link(target=tgt.id, metadata=metadata or {}))
-        self.edges[tgt.id].append(Link(target=src.id, metadata=metadata or {})
+        self.edges[tgt.id].append(Link(target=src.id, metadata=metadata or {}))
